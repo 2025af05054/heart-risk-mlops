@@ -1,0 +1,29 @@
+{
+  "model_name": "logistic_regression",
+  "mlflow_run_id": "fc709b7be4624b45932af74c69f89dcd",
+  "best_params": {
+    "C": 0.1,
+    "l1_ratio": 0.0
+  },
+  "features": [
+    "age",
+    "trestbps",
+    "chol",
+    "thalach",
+    "oldpeak",
+    "ca",
+    "sex",
+    "fbs",
+    "exang",
+    "cp",
+    "restecg",
+    "slope",
+    "thal"
+  ],
+  "threshold": 0.5,
+  "selection_rule": "1-SE rule: best=random_forest 0.9160, cutoff=0.8872, eligible=['logistic_regression', 'random_forest', 'xgboost', 'svm_rbf', 'knn']",
+  "cv_roc_auc": 0.9081196581196581,
+  "test_roc_auc": 0.922077922077922,
+  "test_accuracy": 0.8524590163934426,
+  "trained_at": "2026-10-18T13:06:39"
+}

@@ -1,0 +1,23 @@
+# Full environment: data, EDA, training, tracking, serving, testing.
+# Install with:  pip install -r requirements.txt && pip install -e .
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+scikit-learn==1.9.1
+xgboost==3.4.1
+joblib==1.6.0
+matplotlib==3.11.2
+seaborn==0.13.2
+mlflow==3.17.1
+fastapi==0.144.0
+uvicorn==0.53.0
+pydantic==2.13.5
+prometheus-client==0.26.0
+# notebooks
+nbformat==5.11.1
+nbconvert==7.17.2
+ipykernel==7.4.0
+# testing / linting
+pytest==9.1.1
+httpx==0.28.1
+flake8==7.4.1

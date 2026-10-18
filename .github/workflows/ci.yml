@@ -1,0 +1,108 @@
+name: CI/CD - heart disease MLOps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  MLFLOW_DISABLE_AGENT_HINT: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install flake8==7.4.1
+      - name: flake8
+        run: flake8 src api tests --count --show-source --statistics
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - name: Install dependencies
+        run: pip install -r requirements.txt && pip install -e .
+      - name: Prepare data (downloads only if raw file is missing)
+        run: python -m heart.data
+      - name: Unit tests
+        run: pytest -v --junitxml=reports/junit.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: test-report, path: reports/junit.xml}
+
+  train:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
+      - run: pip install -r requirements.txt && pip install -e .
+      - run: python -m heart.data
+      - name: Train and track all models (MLflow)
+        run: python -m heart.train 2>&1 | tee training.log
+      - name: Quality gate - champion ROC-AUC must be >= 0.85
+        run: |
+          python - <<'PY'
+          import json, sys
+          meta = json.load(open("models/model_meta.json"))
+          print(json.dumps(meta, indent=2))
+          sys.exit(0 if meta["cv_roc_auc"] >= 0.85 else 1)
+          PY
+      - name: Upload model, MLflow runs and plots
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-and-experiments
+          path: |
+            models/
+            mlflow.db
+            mlruns/
+            reports/model_comparison.csv
+            reports/figures/models/
+            training.log
+
+  docker:
+    needs: train
+    runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the model trained in this run
+        uses: actions/download-artifact@v4
+        with: {name: model-and-experiments, path: artifact}
+      - run: cp artifact/models/* models/
+      - name: Build image
+        run: docker build -t heart-risk-api:${{ github.sha }} -t heart-risk-api:1.0.0 .
+      - name: Smoke test container
+        run: |
+          docker run -d --name api -p 8000:8000 heart-risk-api:${{ github.sha }}
+          for i in $(seq 1 30); do curl -fs localhost:8000/ready && break; sleep 2; done
+          curl -fs -X POST localhost:8000/predict -H 'Content-Type: application/json' \
+            -d @scripts/sample_request.json | tee predict.json
+          python3 -c "import json; p=json.load(open('predict.json'))['predictions'][0]; assert 0.5<=p['confidence']<=1"
+          docker logs api > container.log 2>&1
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: container-smoke-test, path: "predict.json\ncontainer.log"}
+      - name: Push to GHCR (main branch only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          IMAGE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/heart-risk-api
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker tag heart-risk-api:${{ github.sha }} $IMAGE:${{ github.sha }}
+          docker tag heart-risk-api:${{ github.sha }} $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }} && docker push $IMAGE:latest

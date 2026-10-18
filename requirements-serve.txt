@@ -1,0 +1,12 @@
+# Minimal runtime for the Docker image (must match the training versions
+# of scikit-learn / xgboost so the pickled pipeline loads identically).
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+scikit-learn==1.9.1
+xgboost==3.4.1
+joblib==1.6.0
+fastapi==0.144.0
+uvicorn==0.53.0
+pydantic==2.13.5
+prometheus-client==0.26.0
